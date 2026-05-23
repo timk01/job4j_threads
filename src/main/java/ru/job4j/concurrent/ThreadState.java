@@ -13,6 +13,11 @@ public class ThreadState {
      * while (first.getState() != Thread.State.TERMINATED || second.getState() != Thread.State.TERMINATED) {
      * }
      * System.out.println("работа завершена");
+     * <p>
+     * Более верный вариант - с джойнами:
+     * first.join();
+     * second.join();
+     * System.out.println("работа завершена");
      *
      * @param args
      * @throws InterruptedException
@@ -29,8 +34,9 @@ public class ThreadState {
         first.start();
         second.start();
 
-        first.join();
-        second.join();
+        while (first.getState() != Thread.State.TERMINATED || second.getState() != Thread.State.TERMINATED) {
+            Thread.sleep(10);
+        }
         System.out.println("работа завершена");
     }
 }
