@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
@@ -89,29 +90,41 @@ public class Wget2 implements Runnable {
      */
     @Override
     public void run() {
-        try (InputStream input = new URL(url).openStream()) {
-            Instant startPoint = Instant.now();
-            byte[] dadaBuffer = new byte[512];
-            long passedTimeInWindow;
-            int bytesRead;
-            int totalBytesReadInWindow = 0;
-            while ((bytesRead = input.read(dadaBuffer, 0, dadaBuffer.length)) != -1) {
-                totalBytesReadInWindow += bytesRead;
+        long totalStart = System.currentTimeMillis();
 
-                if (totalBytesReadInWindow >= speed) {
-                    passedTimeInWindow = Duration.between(startPoint, Instant.now()).toMillis();
+        try {
+            URLConnection connection = new URL(url).openConnection();
+            System.out.println("URL: " + url);
+            System.out.println("Content-Type: " + connection.getContentType());
+            System.out.println("Content-Length: " + connection.getContentLengthLong());
 
-                    if (passedTimeInWindow < 1000) {
-                        Thread.sleep(1000 - passedTimeInWindow);
+            try (InputStream input = connection.getInputStream()) {
+                Instant startPoint = Instant.now();
+                byte[] dataBuffer = new byte[512];
+                long passedTimeFromStart;
+                int bytesRead;
+                int overallBytesRead = 0;
+
+                while ((bytesRead = input.read(dataBuffer, 0, dataBuffer.length)) != -1) {
+                    overallBytesRead += bytesRead;
+                    Instant now = Instant.now();
+                    passedTimeFromStart = Duration.between(startPoint, now).toMillis();
+                    long expectedTime = overallBytesRead * 1000L / speed;
+
+                    System.out.println("speed = " + speed);
+                    if (expectedTime > passedTimeFromStart) {
+                        Thread.sleep(expectedTime - passedTimeFromStart);
                     }
-                    totalBytesReadInWindow = totalBytesReadInWindow - speed;
-                    startPoint = Instant.now();
                 }
+
+                long totalFinish = System.currentTimeMillis();
+                System.out.println("Downloaded bytes: " + overallBytesRead);
+                System.out.println("Total download time with throttle: " + (totalFinish - totalStart) + " ms");
             }
         } catch (IOException e) {
             e.printStackTrace();
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
         }
     }
 
