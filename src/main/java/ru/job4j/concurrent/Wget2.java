@@ -26,31 +26,86 @@ public class Wget2 implements Runnable {
      * long expectedTime = overallBytesRead * 1000L / speed; - как раз то, за сколько предполагатся скачать нечто
      * (накопительный счетчик)
      * passedTimeFromStart - реальное время, оно же постоянно сдвигается после каждого тика цикла
-     *
+     * <p>
      * если рально сеть очень быстрая (т.е. мы примерно сразу читаем необходимые 512 байт)
      * xpectedTime = 512 * 1000 / 1000 = 512 мс, а реально прошло 5 мс, мы будем спать в этот тик 512 - 5 - почти 0.5 с
-     *
+     * <p>
      * если сеть меедленная - т.е. либо мы не читаем полный буффер (т.е. expectedTime будет страдать - будет меньше),
      * ЛИБО мы это делаем, но задержки между чтениями большие - медленный диск/потери пекетов
      * (тогда уже passedTimeFromStart страдает - вырастает)
      * может быть картина, что 1300 > 1000 или 1000 > 5000
      * (тогда и "резать скорость" / вставлять паузы нет смысла)
+     * Instant startPoint = Instant.now();
+     * byte[] dadaBuffer = new byte[512];
+     * long passedTimeFromStart;
+     * int bytesRead;
+     * int overallBytesRead = 0;
+     * while ((bytesRead = input.read(dadaBuffer, 0, dadaBuffer.length)) != -1) {
+     * overallBytesRead += bytesRead;
+     * Instant now = Instant.now();
+     * passedTimeFromStart = Duration.between(startPoint, now).toMillis();
+     * long expectedTime = overallBytesRead * 1000L / speed;
+     * if (expectedTime > passedTimeFromStart) {
+     * Thread.sleep(expectedTime - passedTimeFromStart);
+     * }
+     * }
+     * <p>
+     * ЭТО - был накопитальный счетчик
+     * <p>
+     * А вот это - оконный:
+     * есть лимит: speed байт в секунду
+     * значит окно берём 1 секунду
+     * внутри этого окна копим байты
+     * как только набрали >= speed байт (т.е. наша сумма байтов больше или равна тех, что нужно было загрузить):
+     * смотрим, сколько прошло времени
+     * если меньше 1000 мс → значит скачали слишком быстро, можно sleep(1000 - passed)
+     * если 1000 мс или больше → значит лимит и так не нарушен, ничего не делаем,
+     * тупо ОБРЕЗАЕМ счетчик байтов (чтобы не потерять хвост из данных)
+     * + сдвигаем стартпойнт на "нау" - конец текущего окнца как стартпойнт
+     * <p>
+     * То есть да:
+     * <p>
+     * прошло меньше секунды → спим
+     * прошло больше секунды → просто скипаем паузу
+     * <p>
+     * totalBytesReadInWindow += bytesRead;
+     * <p>
+     * if (totalBytesReadInWindow > speed) {
+     * passedTimeInWindow = Duration.between(startPoint, Instant.now()).toMillis();
+     * <p>
+     * if (passedTimeInWindow < 1000) {
+     * Thread.sleep(1000 - passedTimeInWindow);
+     * }
+     * totalBytesReadInWindow = totalBytesReadInWindow - speed;
+     * startPoint = Instant.now();
+     * }
+     * <p>
+     * здеесь мы говорим про окно которое равняетс сеекунде (потому 1000)
+     * Если speed = 1000 байт/сек, то это значит:
+     * <p>
+     * за 1 секунду можно скачать 1000 байт
+     * если ты скачал 1025 байт за 300 мс — перебрал, надо тормозить
+     * если ты скачал 1025 байт за 1400 мс — всё ок, и так медленно, спать не надо
      */
     @Override
     public void run() {
         try (InputStream input = new URL(url).openStream()) {
             Instant startPoint = Instant.now();
             byte[] dadaBuffer = new byte[512];
-            long passedTimeFromStart;
+            long passedTimeInWindow;
             int bytesRead;
-            int overallBytesRead = 0;
+            int totalBytesReadInWindow = 0;
             while ((bytesRead = input.read(dadaBuffer, 0, dadaBuffer.length)) != -1) {
-                overallBytesRead += bytesRead;
-                Instant now = Instant.now();
-                passedTimeFromStart = Duration.between(startPoint, now).toMillis();
-                long expectedTime = overallBytesRead * 1000L / speed;
-                if (expectedTime > passedTimeFromStart) {
-                    Thread.sleep(expectedTime - passedTimeFromStart);
+                totalBytesReadInWindow += bytesRead;
+
+                if (totalBytesReadInWindow >= speed) {
+                    passedTimeInWindow = Duration.between(startPoint, Instant.now()).toMillis();
+
+                    if (passedTimeInWindow < 1000) {
+                        Thread.sleep(1000 - passedTimeInWindow);
+                    }
+                    totalBytesReadInWindow = totalBytesReadInWindow - speed;
+                    startPoint = Instant.now();
                 }
             }
         } catch (IOException e) {
