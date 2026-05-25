@@ -2,7 +2,7 @@ package ru.job4j.concurrent.atomic.basicexample;
 
 public class CountShareMain {
     public static void main(String[] args) throws InterruptedException {
-        Count count = new Count();
+        CountSynchronized count = new CountSynchronized();
         Thread first = new Thread(
           count::increment
         );
