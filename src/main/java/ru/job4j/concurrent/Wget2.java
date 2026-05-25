@@ -109,9 +109,8 @@ public class Wget2 implements Runnable {
                     overallBytesRead += bytesRead;
                     Instant now = Instant.now();
                     passedTimeFromStart = Duration.between(startPoint, now).toMillis();
-                    long expectedTime = overallBytesRead * 1000L / speed;
+                    long expectedTime = overallBytesRead / speed;
 
-                    System.out.println("speed = " + speed);
                     if (expectedTime > passedTimeFromStart) {
                         Thread.sleep(expectedTime - passedTimeFromStart);
                     }
@@ -128,10 +127,18 @@ public class Wget2 implements Runnable {
         }
     }
 
+    /**
+     * внимание - здесь передача args[1] скорости в БАЙТАХ, т.е. мб/с = 5000
+     * https://proof.ovh.net/files/100Mb.dat 5000
+     * например
+     * @param args
+     * @throws InterruptedException
+     */
+
     public static void main(String[] args) throws InterruptedException {
         validateParams(args);
         String url = args[0];
-        int speed = Integer.parseInt(args[1]);
+        int speed =  Integer.parseInt(args[1]);
         Thread wget2 = new Thread(new Wget2(url, speed));
         wget2.start();
         wget2.join();
