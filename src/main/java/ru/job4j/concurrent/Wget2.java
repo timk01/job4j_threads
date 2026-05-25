@@ -101,18 +101,24 @@ public class Wget2 implements Runnable {
             try (InputStream input = connection.getInputStream()) {
                 Instant startPoint = Instant.now();
                 byte[] dataBuffer = new byte[512];
-                long passedTimeFromStart;
+                long passedTimeInWindow;
                 int bytesRead;
+                int totalBytesReadInWindow = 0;
                 int overallBytesRead = 0;
 
                 while ((bytesRead = input.read(dataBuffer, 0, dataBuffer.length)) != -1) {
                     overallBytesRead += bytesRead;
-                    Instant now = Instant.now();
-                    passedTimeFromStart = Duration.between(startPoint, now).toMillis();
-                    long expectedTime = overallBytesRead / speed;
+                    totalBytesReadInWindow += bytesRead;
 
-                    if (expectedTime > passedTimeFromStart) {
-                        Thread.sleep(expectedTime - passedTimeFromStart);
+                    if (totalBytesReadInWindow >= speed) {
+                        passedTimeInWindow = Duration.between(startPoint, Instant.now()).toMillis();
+
+                        if (passedTimeInWindow < 1000) {
+                            Thread.sleep(1000 - passedTimeInWindow);
+                        }
+
+                        totalBytesReadInWindow = totalBytesReadInWindow - speed;
+                        startPoint = Instant.now();
                     }
                 }
 
