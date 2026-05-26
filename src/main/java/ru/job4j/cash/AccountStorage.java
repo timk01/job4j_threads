@@ -12,24 +12,35 @@ public class AccountStorage {
     @GuardedBy("this")
     private final HashMap<Integer, Account> accounts = new HashMap<>();
 
+    /**
+     * putIfAbsent:
+     * - если значения по ключу не было, добавляет новое и возвращает null;
+     * - если значение уже было, ничего не меняет и возвращает предыдущее.
+     * Поэтому null == успешно добавили.
+     */
+
     public synchronized boolean add(Account account) {
-        if (getById(account.id()).isPresent()) {
-            return false;
-        }
-        accounts.put(account.id(), account);
-        return true;
+        return accounts.putIfAbsent(account.id(), account) == null;
     }
+
+    /**
+     * replace:
+     * - заменяет значение только если ключ уже существует;
+     * - возвращает предыдущее значение, либо null, если ключа не было.
+     * Поэтому != null == успешно обновили.
+     */
 
     public synchronized boolean update(Account account) {
-        accounts.put(account.id(), account);
-        return true;
+        return accounts.replace(account.id(), account) != null;
     }
 
+    /**
+     * просто удаляем с помощью ремув (если нулль - в плане не удалили, хрен с ним)
+     *
+     * @param id
+     */
     public synchronized void delete(int id) {
-        Optional<Account> optionalAccount = getById(id);
-        if (optionalAccount.isPresent()) {
-            accounts.remove(optionalAccount.get().id());
-        }
+        accounts.remove(id);
     }
 
     public synchronized Optional<Account> getById(int id) {
