@@ -199,4 +199,91 @@ class SimpleBlockingQueueTest {
         assertThat(numbersToPut).containsExactly(1, 10, 100);
     }
 
+    /**
+     * !queue.isEmpty() || !Thread.currentThread().isInterrupted()
+     * - очень сильно перекликается с ParallelSearchCommonCase
+     * т.е. тут еще добавляется и это:
+     * о есть после interrupt() consumer всё ещё может дочитать остатки из очереди, если они там есть.
+     *
+     * (!!!т.е. да, опять же НЕ ФАКТ, что к моменту первого интеррапта там прочитали все элменты из прода,
+     * отсюда и двойная проверка и вот ЗДЕСЬ это к месту!!!)
+     * @throws InterruptedException
+     */
+
+    @Test
+    public void whenFetchAllThenGetIt() throws InterruptedException {
+        final CopyOnWriteArrayList<Integer> buffer = new CopyOnWriteArrayList<>();
+        final SimpleBlockingQueue<Integer> queue = new SimpleBlockingQueue<>(5);
+        Thread producer = new Thread(
+                () -> {
+                    for (int index = 0; index < 5; index++) {
+                        try {
+                            queue.offer(index);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+        );
+        producer.start();
+        Thread consumer = new Thread(
+                () -> {
+                    while (!queue.isEmpty() || !Thread.currentThread().isInterrupted()) {
+                        try {
+                            buffer.add(queue.poll());
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                }
+        );
+        consumer.start();
+        producer.join();
+        consumer.interrupt();
+        consumer.join();
+        assertThat(buffer).containsExactly(0, 1, 2, 3, 4);
+    }
+
+    /**
+     * самый простой тест - ин=аут, количества равны, потому и интеррапт/хитрые услоовия выходов также не нужны
+     * @throws InterruptedException
+     */
+
+    @Test
+    public void whenProducedElementsEqualConsumedElements() throws InterruptedException {
+        CopyOnWriteArrayList<Integer> in = new CopyOnWriteArrayList<>();
+        CopyOnWriteArrayList<Integer> out = new CopyOnWriteArrayList<>();
+        final SimpleBlockingQueue<Integer> queue = new SimpleBlockingQueue<>(5);
+        Thread producer = new Thread(
+                () -> {
+                    for (int index = 0; index < 5; index++) {
+                        try {
+                            queue.offer(index);
+                            in.add(index);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+        );
+        Thread consumer = new Thread(
+                () -> {
+                    for (int index = 0; index < 5; index++) {
+                        try {
+                            out.add(queue.poll());
+
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+        );
+        producer.start();
+        consumer.start();
+        producer.join();
+        consumer.join();
+
+        assertThat(out).containsExactlyElementsOf(in);
+    }
 }
